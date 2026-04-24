@@ -1,0 +1,47 @@
+# Data handling
+pandas==2.2.3
+numpy==1.26.4
+pyarrow==18.0.0
+
+# API and data fetching
+requests==2.32.3
+sodapy==2.2.0
+
+# ML — classical
+scikit-learn==1.5.2
+xgboost==2.1.2
+
+# Hyperparameter tuning
+optuna==4.1.0
+
+# Experiment tracking
+mlflow==2.18.0
+
+# Data versioning
+dvc==3.56.0
+
+# API service
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.2
+
+# Monitoring and dashboard
+streamlit==1.40.2
+
+# Notebooks and visualization
+jupyter==1.1.1
+matplotlib==3.9.3
+seaborn==0.13.2
+plotly==5.24.1
+
+# Testing
+pytest==8.3.4
+pytest-cov==6.0.0
+
+# Utilities
+python-dotenv==1.0.1
+tqdm==4.67.1
+
+# Code quality (optional but recommended)
+black==24.10.0
+ruff==0.8.2

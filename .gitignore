@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (под DVC, не под git)
+data/raw/
+data/interim/
+data/processed/
+*.csv
+*.parquet
+*.pkl
+*.joblib
+
+# Модели и артефакты
+models/
+*.h5
+*.onnx
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# DVC
+.dvc/tmp/
+.dvc/cache/
+
+# Логи
+*.log
+logs/
+
+# SQLite (наш лог мониторинга)
+*.db
+*.sqlite
+*.sqlite3
+
+# Секреты (никогда не коммитим)
+.env
+*.pem
+*.key
+secrets/
+
+# Docker
+*.pid
+
+!**/.gitkeep
