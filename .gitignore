@@ -68,3 +68,4 @@ secrets/
 *.pid
 
 !**/.gitkeep
+reports/
