@@ -1,0 +1,40 @@
+# Не нужно в образе — это раздуло бы его до сотен мегабайт лишним
+
+# Среды и виртуальное окружение
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Эксперименты и сырые данные (модель уже экспортирована)
+mlruns/
+.dvc/
+data/raw/
+data/interim/
+data/monitoring/
+notebooks/
+reports/
+
+# Документация и метаинформация
+docs/
+*.md
+!PROJECT_CONTEXT.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Тесты
+tests/
