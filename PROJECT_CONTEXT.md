@@ -155,6 +155,12 @@ _Будем добавлять по мере работы над Главой 1.
 - **Резкая иерархия важности групп признаков.** actual_t0 (1 признак, +22.93% MAE при удалении) и baseline_profile (2 признака, +16.57%) обеспечивают 95% сигнала модели. Группы incident, route и temporal суммарно дают <1.5%. Это объясняет, почему Optuna дал прирост всего +1.4% — потолок задачи лежит в признаковом пространстве, а не в гиперпараметрах.
 - **Идентифицирован кандидат для v2.** Версия v2 модели — без temporal-признаков (22 фичи), MAE = 10.590 vs v1 MAE = 10.749 (+1.48%). Это будет осью раздела 4.4 «Демонстрация полного цикла ML».
 
+### Day 7 (29.04.2026)
+- **TypeError на /predict (IndexError: list index out of range).** В `model_loader.predict()` была лишняя строка `baseline_t1 = X.index.map(...)`, которая обращалась к pandas-индексу как к позиционному индексу списка. Решение: удаление строки + добавление `.reset_index(drop=True)` в `build_features()`.
+- **IndentationError при правке model_loader.py.** При ручном редактировании метода `predict` сбился отступ (`def predict` оказался без отступа, тело — с отступом 8 пробелов). Решение: переписать весь файл целиком одним блоком, без смешивания табов и пробелов.
+- **MLflow log_model: artifact_path в 2.18.** Параметр в `mlflow.xgboost.log_model` — `artifact_path`, не `name` (известная проблема Day 4, повторно встретилась в `export_model.py`).
+- **Размер экспортированной модели — 14 МБ.** XGBoost из 150 деревьев глубины 11 даёт 14 МБ JSON. Это будет важно для Docker (Day 8) — образ должен включать модель.
+
 ## 9. Прогресс по дням
 
 ### Day 1 — 24.04.2026 ✅
@@ -252,6 +258,23 @@ _Будем добавлять по мере работы над Главой 1.
 - 3.5 Feature importance + парадокс с ablation: fig_3_6_feature_importance.png
 
 
+### Day 7 — 29.04.2026 ✅
+**Главное достижение:** ML-модель из ноутбука превращена в production-ready FastAPI-сервис.
+
+Сделано:
+1. Создан скрипт `scripts/export_model.py` — экспорт лучшей модели XGBoost (Optuna) из MLflow в standalone-файлы: `models/xgboost_v1.json` (14 МБ), `xgboost_v1_metadata.json`, `feature_columns.json`.
+2. Создан модуль `src/api/schemas.py` — Pydantic-схемы (IncidentRequest, RoutePrediction, PredictionResponse, HealthResponse, ModelInfoResponse).
+3. Создан `src/api/model_loader.py` — класс ModelLoader: загрузка модели и baseline-профиля (route × dow × hour, 64 512 записей), карта линия→borough, feature engineering для инференса.
+4. Создан `src/api/main.py` — FastAPI-приложение с тремя endpoint'ами: GET /health, GET /model/info, POST /predict.
+5. Реализовано логирование запросов в SQLite (`data/monitoring/predictions.db`).
+6. Сервис запускается локально: `uvicorn src.api.main:app --reload --port 8000`.
+7. Swagger UI на `/docs` рендерится корректно.
+8. Тестовый запрос: инцидент A/C/E в час пик 15.12.2024 → восстановлено 3 boroughs (Brooklyn, Manhattan, Queens), 260 маршрутов, prediction для каждого.
+9. Топ-результата: M15+ Manhattan (uplift -40.75 пасс/час), Q58 Queens (+27.4), M104 Manhattan (+18.6). Модель различает направления оттока и притока.
+10. Создан `scripts/check_predictions_log.py` для просмотра SQLite-лога.
+11. Скриншоты для раздела 4.2 ВКР: fig_4_1...fig_4_8 (8 рисунков).
+12. Одиннадцатый коммит в GitHub.
+
 
 
 
@@ -302,6 +325,16 @@ _Будем добавлять по мере работы над Главой 1.
 
 | `fig_3_5_ablation_table.png` | 3 | 3.3 | Рис. 3.5 — таблица ablation study |
 | `fig_3_6_feature_importance.png` | 3 | 3.5 | Рис. 3.6 — feature importance топ-15 |
+
+| `fig_4_1_swagger_overview.png` | 4 | 4.2 | Рис. 4.1 — Главная страница Swagger UI |
+| `fig_4_2_health_response.png` | 4 | 4.2 | Рис. 4.2 — Ответ /health |
+| `fig_4_3_model_info_response.png` | 4 | 4.2 | Рис. 4.3 — Ответ /model/info с метриками |
+| `fig_4_4_predict_request.png` | 4 | 4.2 | Рис. 4.4 — JSON-запрос к /predict |
+| `fig_4_5_predict_response_meta.png` | 4 | 4.2 | Рис. 4.5 — Метаданные ответа /predict |
+| `fig_4_6_predict_response_top.png` | 4 | 4.2 | Рис. 4.6 — Топ-6 маршрутов по uplift |
+| `fig_4_7_uvicorn_logs.png` | 4 | 4.2 | Рис. 4.7 — Логи uvicorn |
+| `fig_4_8_sqlite_log.png` | 4 | 4.3 | Рис. 4.8 — Содержимое SQLite-лога |
+
 
 ## 12. Готовые формулировки для текста диссертации
 
@@ -364,10 +397,12 @@ _Будем добавлять по мере работы над Главой 1.
 | Блок | Статус | Прогресс |
 |------|--------|----------|
 | A. Фундамент (среда, git, DVC, MLflow) | ✅ Готово | 100% |
-| B. Данные и модели | ✅ Готово | 100% (все эксперименты Главы 3 проведены) |
-| C. FastAPI + Docker | ⏳ Не начат | 0% |
-| D. Мониторинг + цикл v1→v2 | ⏳ Не начат | 0% (план v2 определён) |
+| B. Данные и модели | ✅ Готово | 100% |
+| C. FastAPI + Docker | 🚧 В работе | 50% (FastAPI готов, осталось Docker) |
+| D. Мониторинг + цикл v1→v2 | ⏳ Не начат | 0% |
 | E. Текст диссертации | ⏳ Не начат | 0% |
+
+
 
 
 
