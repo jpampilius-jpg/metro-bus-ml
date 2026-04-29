@@ -2,7 +2,7 @@
 FastAPI-сервис для прогнозирования прироста пассажиропотока.
 Запуск: uvicorn src.api.main:app --reload --port 8000
 """
-
+import os
 import json
 import sqlite3
 from datetime import datetime
@@ -96,9 +96,12 @@ def on_startup():
     global ml
     print("[startup] Инициализация БД...")
     init_database()
-    print("[startup] Загрузка модели...")
-    ml = ModelLoader(PROJECT_ROOT)
-    print("[startup] Сервис готов к работе")
+    
+    # Версия модели читается из переменной окружения
+    model_version = os.environ.get("MODEL_VERSION", "v1")
+    print(f"[startup] Загрузка модели версии {model_version}...")
+    ml = ModelLoader(PROJECT_ROOT, model_version=model_version)
+    print(f"[startup] Сервис готов к работе с моделью {model_version}")
 
 
 # ============================================================

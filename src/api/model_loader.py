@@ -1,5 +1,6 @@
 """
 Загрузка модели и подготовка признаков для предсказания.
+Поддержка нескольких версий модели через параметр model_version.
 """
 
 import json
@@ -15,7 +16,6 @@ import xgboost as xgb
 class ModelLoader:
     """Загружает обученную модель XGBoost и готовит признаки для инференса."""
 
-    # Карта линия → borough (из Day 3)
     LINE_TO_BOROUGHS = {
         "1": ["Manhattan", "Bronx"],
         "2": ["Manhattan", "Bronx", "Brooklyn"],
@@ -42,9 +42,18 @@ class ModelLoader:
         "S": ["Manhattan", "Brooklyn"],
     }
 
-    def __init__(self, project_root: Path):
+    SUPPORTED_VERSIONS = ("v1", "v2")
+
+    def __init__(self, project_root: Path, model_version: str = "v1"):
+        if model_version not in self.SUPPORTED_VERSIONS:
+            raise ValueError(
+                f"Неизвестная версия модели: {model_version}. "
+                f"Допустимые: {self.SUPPORTED_VERSIONS}"
+            )
+
         self.project_root = Path(project_root)
         self.models_dir = self.project_root / "models"
+        self.model_version = model_version
 
         self.model: xgb.Booster = None
         self.feature_columns: List[str] = []
@@ -56,10 +65,19 @@ class ModelLoader:
         self._load_baseline_profile()
 
     def _load_model(self) -> None:
-        """Загружает XGBoost-модель и метаданные."""
-        model_path = self.models_dir / "xgboost_v1.json"
-        metadata_path = self.models_dir / "xgboost_v1_metadata.json"
-        features_path = self.models_dir / "feature_columns.json"
+        """Загружает XGBoost-модель версии self.model_version и метаданные."""
+        if self.model_version == "v1":
+            model_filename = "xgboost_v1.json"
+            metadata_filename = "xgboost_v1_metadata.json"
+            features_filename = "feature_columns.json"
+        else:  # v2
+            model_filename = "xgboost_v2.json"
+            metadata_filename = "xgboost_v2_metadata.json"
+            features_filename = "feature_columns_v2.json"
+
+        model_path = self.models_dir / model_filename
+        metadata_path = self.models_dir / metadata_filename
+        features_path = self.models_dir / features_filename
 
         if not model_path.exists():
             raise FileNotFoundError(f"Не найден файл модели: {model_path}")
@@ -73,16 +91,15 @@ class ModelLoader:
         with open(features_path, "r", encoding="utf-8") as f:
             self.feature_columns = json.load(f)
 
-        print(f"[ModelLoader] Модель загружена: {model_path.name}")
+        print(f"[ModelLoader] Модель загружена: {model_path.name} (версия {self.model_version})")
         print(f"[ModelLoader] Признаков: {len(self.feature_columns)}")
-        print(f"[ModelLoader] Версия: {self.metadata.get('model_version')}")
 
     def _load_baseline_profile(self) -> None:
         """Загружает базовый профиль (route × dow × hour) из training set."""
         training_set_path = self.project_root / "data" / "processed" / "training_set_v1.parquet"
 
         if not training_set_path.exists():
-            print(f"[ModelLoader] WARNING: training_set не найден, baseline-профиль не загружен")
+            print(f"[ModelLoader] WARNING: training_set не найден")
             return
 
         df = pd.read_parquet(training_set_path)
@@ -100,13 +117,11 @@ class ModelLoader:
               .reset_index()
         )
 
-        # Карта route → borough
         if "route_borough" in df.columns:
             route_borough = df.groupby("bus_route")["route_borough"].first().to_dict()
         else:
             route_borough = {}
 
-        # Если route_borough нет в датасете — восстанавливаем по префиксу
         if not route_borough:
             unique_routes = df["bus_route"].unique()
             for r in unique_routes:
@@ -129,7 +144,6 @@ class ModelLoader:
         print(f"[ModelLoader] Уникальных маршрутов: {self.baseline_profile['bus_route'].nunique()}")
 
     def get_affected_boroughs(self, lines_affected: List[str]) -> List[str]:
-        """По списку линий метро возвращает затронутые boroughs."""
         boroughs = set()
         for line in lines_affected:
             if line in self.LINE_TO_BOROUGHS:
@@ -145,7 +159,7 @@ class ModelLoader:
     ) -> Tuple[pd.DataFrame, List[str]]:
         """
         Собирает DataFrame признаков для всех маршрутов в зоне влияния.
-        Возвращает (X, route_list).
+        Учитывает feature_columns текущей версии модели (v1=32, v2=22).
         """
         boroughs_affected = self.get_affected_boroughs(lines_affected)
 
@@ -172,7 +186,7 @@ class ModelLoader:
         if sub.empty:
             return pd.DataFrame(), []
 
-        # Признаки инцидента
+        # Признаки инцидента (все, что нужны для v1; для v2 лишние будут отброшены при reindex)
         sub["hour"] = hour
         sub["day_of_week"] = dow
         sub["is_weekend"] = int(dow >= 5)
@@ -185,7 +199,6 @@ class ModelLoader:
         sub["route_in_zone"] = 1
         sub["route_borough"] = sub["bus_route"].map(self.route_borough_map)
 
-        # time_of_day
         if hour < 6:
             time_of_day = "night"
         elif hour < 10:
@@ -200,10 +213,11 @@ class ModelLoader:
 
         sub["status_main"] = status_label.split()[0] if status_label else "unknown"
 
-        # One-hot encoding
         cat_cols = ["time_of_day", "status_main", "route_borough"]
         sub_encoded = pd.get_dummies(sub, columns=cat_cols, drop_first=False)
 
+        # Подгонка под feature_columns модели (v1 или v2):
+        # лишние колонки удаляются, недостающие добавляются нулями
         for col in self.feature_columns:
             if col not in sub_encoded.columns:
                 sub_encoded[col] = 0
@@ -220,7 +234,6 @@ class ModelLoader:
         status_label: str,
         duration_min: int,
     ) -> List[dict]:
-        """Возвращает список предсказаний для всех маршрутов в зоне."""
         X, routes = self.build_features(incident_dt, lines_affected, status_label, duration_min)
 
         if X.empty:
@@ -245,7 +258,6 @@ class ModelLoader:
         return results
 
     def _get_baseline_t1(self, route: str, incident_dt: datetime) -> float:
-        """Достаёт baseline_t1 для конкретного маршрута и времени."""
         sub = self.baseline_profile[
             (self.baseline_profile["bus_route"] == route)
             & (self.baseline_profile["dow"] == incident_dt.weekday())
